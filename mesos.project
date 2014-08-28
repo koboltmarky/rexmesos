@@ -1,0 +1,137 @@
+use strict;
+
+user "root";
+private_key "";
+public_key "";
+key_auth;
+
+environment dev => sub {
+	group "mesos-master-server" => "mesosmaster01","mesosmaster02";
+	group "mesos-slave-server"  => "mesosslave01","mesosslave02";
+	group "all-server" => "mesosslave0[1..2],", "mesosmaster0[1..2]";
+};
+
+desc "Install basis packages";
+task "install_packages",group=>"all-server",sub {
+	install package =>  [
+                  "curl",
+                  "python-setuptools",
+                  "python-pip",
+                  "python-dev",
+                  "python-protobuf",
+                  "zookeeperd",
+				  "apt-transport-https",
+                ];
+};
+
+desc "Install mesos packages";
+task "install_mesos_packages",group=>"all-server",sub {
+	install package =>  [
+				  "mesos",
+				  "marathon",
+				  "deimos",  
+                ];
+};
+
+desc "Install docker packages";
+task "install_docker_packages",group=>"all-server",sub {
+	install package =>  [
+				  "lxc-docker",
+                ];
+};
+
+desc "add docker repo";
+task "add_docker_repo",group => "all-servers",sub {
+	say run "apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 36A1D7869245C8950F966E92D8576A8BA88D21E9";
+	repository "add" => "docker.io",
+      url      => " https://get.docker.io/ubuntu",
+      distro    => "docker",
+      repository => "main",
+      source    => 1;
+};
+
+desc "add mesosphere repo";
+task "add_mesosphere_repo",group => "all-servers",sub {
+	say run "apt-key adv --keyserver keyserver.ubuntu.com --recv E56151BF";
+	repository "add" => "mesossphere",
+      url      => "http://repos.mesosphere.io/ubuntu",
+      distro    => "trusty",
+      repository => "main",
+      source    => 1;
+};
+
+desc "configure mesos master";
+task "configure_mesos_master",group => "mesos-master-server", sub {
+  file "/etc/mesos-master",
+     ensure => "directory",
+     owner  => "root",
+     group  => "root",
+     mode   => 0755;
+	  
+  file "/etc/mesos-master/registry",
+   source => "files/etc/mesos-master/registry";
+   
+  file "/etc/mesos/zk",
+	template => "files/etc/mesos/zk",$mesomaster01 => $meso-master-server[0], $mesomaster02 => $meso-master-server[1];
+};
+
+desc "configure mesos slave";
+task "configure_mesos_slave",group => "mesos-slave-server", sub {
+  file "/etc/mesos-slave",
+    ensure => "directory",
+    owner  => "root",
+    group  => "root",
+    mode   => 0755;
+	 
+  file "/etc/mesos-slave/isolation",
+    source => "files/etc/mesos-slave/isolation";
+   
+  file "/etc/mesos-slave/containerizer_path",
+    source => "files/etc/mesos-slave/containerizer_path";
+   
+  file "/etc/mesos/zk",
+    template => "files/etc/mesos/zk",$mesomaster01 => $meso-master-server[0], $mesomaster02 => $meso-master-server[1];
+  
+};
+
+desc "create_zookeeper_config",group => "mesos-master-server",sub {
+	my $check = run_task "exists_zookeeper_file";
+	my $zookeeperID = "";
+	if ($check -eq 1) {
+		open my $file, '<>', "zookeeperid.txt"; 
+		$zookeeperID = <$file>; 
+		print <$file> $zookeeperID++; 
+		close $file;
+	}
+	else {
+		open my $file, '>', "zookeeperid.txt"; 
+		print <$file> 1; 
+		close $file;
+		$zookeeperID=1;
+	}
+		
+	say run "echo $zookeeperID >/var/lib/zookeeper/myid";
+};
+
+task "exists_zookeeper_file", sub {
+   if (is_file("zookeeperid.txt")) {
+	return 1;
+   }
+   else {
+	return 0:
+   }
+};
+
+
+
+
+
+
+
+
+
+
+
+
+
+
