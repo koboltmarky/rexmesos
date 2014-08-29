@@ -1,1 +1,0 @@
-zk://<%= $mesosmaster01 %>:2181,<%= $mesosmaster02 %>:2181,/mesos

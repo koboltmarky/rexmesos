@@ -1,0 +1,1 @@
+zk://<% for my $server (@{ $zkMaster }) {%><%= $server %>:2181,<%}%>/mesos

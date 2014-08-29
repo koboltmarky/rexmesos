@@ -9,7 +9,15 @@ environment dev => sub {
 	group "mesos-master-server" => "mesosmaster01","mesosmaster02";
 	group "mesos-slave-server"  => "mesosslave01","mesosslave02";
 	group "all-server" => "mesosslave0[1..2],", "mesosmaster0[1..2]";
+	
 };
+
+case environment, {
+                    dev    =>  set zkMaster => ["mesosmaster01","mesosmaster02"],
+                    stage => 	[""],
+                    live    =>  [""],
+                    default =>  [""],
+                   };
 
 desc "Install basis packages";
 task "install_packages",group=>"all-server",sub {
@@ -23,6 +31,8 @@ task "install_packages",group=>"all-server",sub {
 				  "apt-transport-https",
                 ];
 };
+
+case
 
 desc "Install mesos packages";
 task "install_mesos_packages",group=>"all-server",sub {
@@ -62,26 +72,42 @@ task "add_mesosphere_repo",group => "all-servers",sub {
 
 desc "configure mesos master";
 task "configure_mesos_master",group => "mesos-master-server", sub {
+  my $zkMaster = get "zkMaster";
+  
   file "/etc/mesos-master",
      ensure => "directory",
      owner  => "root",
      group  => "root",
-     mode   => 0755;
-	  
+     mode   => 755;
+	 
+  file "/etc/mesos",
+    ensure => "directory",
+    owner  => "root",
+    group  => "root",
+    mode   => 755; 
+	 
   file "/etc/mesos-master/registry",
    source => "files/etc/mesos-master/registry";
    
   file "/etc/mesos/zk",
-	template => "files/etc/mesos/zk",$mesomaster01 => $meso-master-server[0], $mesomaster02 => $meso-master-server[1];
+	content => template ("files/etc/mesos/zk",zkMaster => $zkMaster);
 };
 
 desc "configure mesos slave";
 task "configure_mesos_slave",group => "mesos-slave-server", sub {
+  my $zkMaster = get "zkMaster";
+  
   file "/etc/mesos-slave",
     ensure => "directory",
     owner  => "root",
     group  => "root",
-    mode   => 0755;
+    mode   => 755;
+    
+   file "/etc/mesos",
+    ensure => "directory",
+    owner  => "root",
+    group  => "root",
+    mode   => 755;
 	 
   file "/etc/mesos-slave/isolation",
     source => "files/etc/mesos-slave/isolation";
@@ -90,26 +116,31 @@ task "configure_mesos_slave",group => "mesos-slave-server", sub {
     source => "files/etc/mesos-slave/containerizer_path";
    
   file "/etc/mesos/zk",
-    template => "files/etc/mesos/zk",$mesomaster01 => $meso-master-server[0], $mesomaster02 => $meso-master-server[1];
-  
+  	content => template ("files/etc/mesos/zk",zkMaster => $zkMaster);
 };
 
-desc "create_zookeeper_config",group => "mesos-master-server",sub {
+desc "create_zookeeper_config";
+task "create_zookeeper_config",group => "mesos-master-server",sub {
+	
 	my $check = run_task "exists_zookeeper_file";
 	my $zookeeperID = "";
-	if ($check -eq 1) {
-		open my $file, '<>', "zookeeperid.txt"; 
-		$zookeeperID = <$file>; 
-		print <$file> $zookeeperID++; 
-		close $file;
+	
+	if ($check eq 1) {
+		open FILE, "<", "zookeeperid.txt" or die $!;
+		$zookeeperID = <FILE>;
+		close FILE;
+		
+		open FILE, "+>", "zookeeperid.txt" or die $!;
+		print FILE $zookeeperID+1;
+		close FILE;
 	}
 	else {
-		open my $file, '>', "zookeeperid.txt"; 
-		print <$file> 1; 
-		close $file;
+		open FILE, "+>", "zookeeperid.txt" or die $!;
+		print FILE 1;
+		close FILE;
 		$zookeeperID=1;
 	}
-		
+	
 	say run "echo $zookeeperID >/var/lib/zookeeper/myid";
 };
 
@@ -118,7 +149,7 @@ task "exists_zookeeper_file", sub {
 	return 1;
    }
    else {
-	return 0:
+	return 0;
    }
 };
 
